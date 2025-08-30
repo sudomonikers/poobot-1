@@ -10,7 +10,6 @@ import json
 from datetime import datetime
 import logging
 
-# Import our custom modules
 from mapper import EnvironmentMapper, RobotState
 from motors import RobotMotorController
 from sensors import SensorController
