@@ -5,7 +5,7 @@ from picamera2 import Picamera2
 from ultralytics import YOLO
 
 # Configuration
-MODEL_PATH = "yolov11n.pt"  # YOLOv11 Nano model
+MODEL_PATH = "yolo11n.pt"  # YOLOv11 Nano model - will auto-download
 CONFIDENCE_THRESHOLD = 0.5
 RESOLUTION = (640, 480)
 
@@ -18,7 +18,8 @@ cap = Picamera2()
 cap.configure(cap.create_video_configuration(main={"format": 'RGB888', "size": RESOLUTION}))
 cap.start()
 
-# Load YOLO model
+# Load YOLO model (will auto-download on first use)
+print("Loading YOLO model...")
 model = YOLO(MODEL_PATH, task='detect')
 labels = model.names
 
