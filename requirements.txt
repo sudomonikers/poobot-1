@@ -1,1 +1,10 @@
-gpiozero
+# GPIO and hardware control
+RPi.GPIO>=0.7.0
+
+# Camera and computer vision
+opencv-python>=4.5.0
+numpy>=1.21.0
+picamera2>=0.3.0
+
+# TensorFlow Lite for AI model inference (commented out - install if using AI model)
+# tflite-runtime>=2.5.0
