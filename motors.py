@@ -12,13 +12,15 @@ from gpio_mock import GPIO
 logger = logging.getLogger(__name__)
 
 class RobotMotorController:
-    """Enhanced motor controller with position tracking"""
+    """Enhanced motor controller with position tracking for 4-wheel drive"""
     
     def __init__(self, mapper=None):
-        # Motor GPIO pins (L298N motor driver)
+        # Motor GPIO pins for direct 4-wheel drive control
         self.motor_pins = {
-            'left_motor': {'in1': 18, 'in2': 19, 'enable': 12},
-            'right_motor': {'in1': 20, 'in2': 21, 'enable': 13}
+            'front_left': {'positive': 18, 'negative': 19},
+            'front_right': {'positive': 20, 'negative': 21},
+            'rear_left': {'positive': 22, 'negative': 23},
+            'rear_right': {'positive': 24, 'negative': 25}
         }
         
         # Setup GPIO
@@ -29,11 +31,16 @@ class RobotMotorController:
             for pin in motor.values():
                 GPIO.setup(pin, GPIO.OUT)
         
-        # PWM setup
-        self.left_pwm = GPIO.PWM(self.motor_pins['left_motor']['enable'], 1000)
-        self.right_pwm = GPIO.PWM(self.motor_pins['right_motor']['enable'], 1000)
-        self.left_pwm.start(0)
-        self.right_pwm.start(0)
+        # PWM setup for speed control on positive pins
+        self.front_left_pwm = GPIO.PWM(self.motor_pins['front_left']['positive'], 1000)
+        self.front_right_pwm = GPIO.PWM(self.motor_pins['front_right']['positive'], 1000)
+        self.rear_left_pwm = GPIO.PWM(self.motor_pins['rear_left']['positive'], 1000)
+        self.rear_right_pwm = GPIO.PWM(self.motor_pins['rear_right']['positive'], 1000)
+        
+        self.front_left_pwm.start(0)
+        self.front_right_pwm.start(0)
+        self.rear_left_pwm.start(0)
+        self.rear_right_pwm.start(0)
         
         self.current_speed = 50
         self.is_moving = False
@@ -44,27 +51,62 @@ class RobotMotorController:
         self.degrees_per_second_turn = 90   # Calibrate this
     
     def set_motor_direction(self, motor, direction):
-        """Set individual motor direction"""
+        """Set individual motor direction for direct GPIO control"""
         pins = self.motor_pins[motor]
         
         if direction == "forward":
-            GPIO.output(pins['in1'], GPIO.HIGH)
-            GPIO.output(pins['in2'], GPIO.LOW)
+            # Positive pin gets PWM, negative pin is LOW
+            GPIO.output(pins['negative'], GPIO.LOW)
         elif direction == "backward":
-            GPIO.output(pins['in1'], GPIO.LOW)
-            GPIO.output(pins['in2'], GPIO.HIGH)
+            # Positive pin gets PWM, negative pin is HIGH (reversed polarity)
+            GPIO.output(pins['negative'], GPIO.HIGH)
         elif direction == "stop":
-            GPIO.output(pins['in1'], GPIO.LOW)
-            GPIO.output(pins['in2'], GPIO.LOW)
+            # Both pins LOW, motor stops
+            GPIO.output(pins['negative'], GPIO.LOW)
+            # PWM will be set to 0 in set_motor_speed
     
     def set_motor_speed(self, motor, speed):
         """Set individual motor speed (0-100%)"""
         speed = max(0, min(100, speed))
         
-        if motor == 'left_motor':
-            self.left_pwm.ChangeDutyCycle(speed)
+        if motor == 'front_left':
+            self.front_left_pwm.ChangeDutyCycle(speed)
+        elif motor == 'front_right':
+            self.front_right_pwm.ChangeDutyCycle(speed)
+        elif motor == 'rear_left':
+            self.rear_left_pwm.ChangeDutyCycle(speed)
+        elif motor == 'rear_right':
+            self.rear_right_pwm.ChangeDutyCycle(speed)
+        # Backward compatibility
+        elif motor == 'left_motor':
+            self.front_left_pwm.ChangeDutyCycle(speed)
+            self.rear_left_pwm.ChangeDutyCycle(speed)
         elif motor == 'right_motor':
-            self.right_pwm.ChangeDutyCycle(speed)
+            self.front_right_pwm.ChangeDutyCycle(speed)
+            self.rear_right_pwm.ChangeDutyCycle(speed)
+    
+    def set_left_motors(self, direction, speed=None):
+        """Control both left motors"""
+        speed = speed or self.current_speed
+        self.set_motor_direction('front_left', direction)
+        self.set_motor_direction('rear_left', direction)
+        self.set_motor_speed('front_left', speed)
+        self.set_motor_speed('rear_left', speed)
+    
+    def set_right_motors(self, direction, speed=None):
+        """Control both right motors"""
+        speed = speed or self.current_speed
+        self.set_motor_direction('front_right', direction)
+        self.set_motor_direction('rear_right', direction)
+        self.set_motor_speed('front_right', speed)
+        self.set_motor_speed('rear_right', speed)
+    
+    def set_all_motors(self, direction, speed=None):
+        """Control all 4 motors"""
+        speed = speed or self.current_speed
+        for motor in self.motor_pins.keys():
+            self.set_motor_direction(motor, direction)
+            self.set_motor_speed(motor, speed)
     
     def move_forward_distance(self, distance_cm, speed=None):
         """Move forward for specific distance with position tracking"""
@@ -74,11 +116,8 @@ class RobotMotorController:
         speed_factor = speed / 50.0
         time_needed = distance_cm / (self.cm_per_second_at_50_speed * speed_factor)
         
-        # Move
-        self.set_motor_direction('left_motor', 'forward')
-        self.set_motor_direction('right_motor', 'forward')
-        self.set_motor_speed('left_motor', speed)
-        self.set_motor_speed('right_motor', speed)
+        # Move all motors forward
+        self.set_all_motors('forward', speed)
         
         self.is_moving = True
         time.sleep(time_needed)
@@ -102,14 +141,11 @@ class RobotMotorController:
         time_needed = abs(degrees) / self.degrees_per_second_turn
         
         if degrees > 0:  # Turn right
-            self.set_motor_direction('left_motor', 'forward')
-            self.set_motor_direction('right_motor', 'backward')
+            self.set_left_motors('forward', speed)
+            self.set_right_motors('backward', speed)
         else:  # Turn left
-            self.set_motor_direction('left_motor', 'backward')
-            self.set_motor_direction('right_motor', 'forward')
-        
-        self.set_motor_speed('left_motor', speed)
-        self.set_motor_speed('right_motor', speed)
+            self.set_left_motors('backward', speed)
+            self.set_right_motors('forward', speed)
         
         self.is_moving = True
         time.sleep(time_needed)
@@ -165,15 +201,36 @@ class RobotMotorController:
     
     def stop(self):
         """Stop all motors"""
-        self.set_motor_direction('left_motor', 'stop')
-        self.set_motor_direction('right_motor', 'stop')
-        self.set_motor_speed('left_motor', 0)
-        self.set_motor_speed('right_motor', 0)
+        self.set_all_motors('stop', 0)
         self.is_moving = False
     
     def cleanup(self):
         """Clean up GPIO resources"""
         self.stop()
-        self.left_pwm.stop()
-        self.right_pwm.stop()
+        self.front_left_pwm.stop()
+        self.front_right_pwm.stop()
+        self.rear_left_pwm.stop()
+        self.rear_right_pwm.stop()
         GPIO.cleanup()
+
+
+if __name__ == "__main__":
+    print("Testing 4-wheel drive motor controller...")
+    
+    # Initialize motor controller without mapper for testing
+    motor_controller = RobotMotorController()
+    
+    try:
+        print("Moving forward for 1 second...")
+        motor_controller.set_all_motors('forward', 50)  # 50% speed
+        time.sleep(1)
+        motor_controller.stop()
+        print("Test complete!")
+        
+    except KeyboardInterrupt:
+        print("Test interrupted by user")
+    except Exception as e:
+        print(f"Error during test: {e}")
+    finally:
+        motor_controller.cleanup()
+        print("GPIO cleanup complete")
