@@ -17,10 +17,10 @@ class RobotMotorController:
     def __init__(self, mapper=None):
         # Motor GPIO pins for direct 4-wheel drive control
         self.motor_pins = {
-            'front_left': {'positive': 18, 'negative': 19},
-            'front_right': {'positive': 20, 'negative': 21},
-            'rear_left': {'positive': 22, 'negative': 23},
-            'rear_right': {'positive': 24, 'negative': 25}
+            'front_left': {'positive': 1, 'negative': 2},
+            'front_right': {'positive': 5, 'negative': 6},
+            'rear_left': {'positive': 9, 'negative': 10},
+            'rear_right': {'positive': 13, 'negative': 14}
         }
         
         # Setup GPIO
